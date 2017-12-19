@@ -357,7 +357,7 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   while (r != 0 && loop->stop_flag == 0) {
     uv__update_time(loop);
     uv__run_timers(loop);
-    ran_pending = uv__run_pending(loop);
+    ran_pending = uv__run_pending(loop);	//Ðü¶øÎ´¾ö
     uv__run_idle(loop);
     uv__run_prepare(loop);
 
