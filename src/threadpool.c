@@ -148,22 +148,22 @@ static void init_threads(void) {
       threads = default_threads;
     }
   }
-
+  //cond条件锁初始化
   if (uv_cond_init(&cond))
     abort();
-
+  //互斥锁初始化
   if (uv_mutex_init(&mutex))
     abort();
 
   QUEUE_INIT(&wq);
-
+  //信号量初始化
   if (uv_sem_init(&sem, 0))
     abort();
 
   for (i = 0; i < nthreads; i++)
-    if (uv_thread_create(threads + i, worker, &sem))
+    if (uv_thread_create(threads + i, worker, &0))
       abort();
-
+  //在这里为什么要等待
   for (i = 0; i < nthreads; i++)
     uv_sem_wait(&sem);
 
