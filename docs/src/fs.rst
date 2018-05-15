@@ -162,9 +162,11 @@ API
     Cleanup request. Must be called after a request is finished to deallocate
     any memory libuv might have allocated.
 
-.. c:function:: int uv_fs_close(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb)
+.. c:function:: int uv_fs_close(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, uv_fs_cb cb)
 
     Equivalent to :man:`close(2)`.
+
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
 
 .. c:function:: int uv_fs_open(uv_loop_t* loop, uv_fs_t* req, const char* path, int flags, int mode, uv_fs_cb cb)
 
@@ -175,17 +177,21 @@ API
         in binary mode. Because of this the O_BINARY and O_TEXT flags are not
         supported.
 
-.. c:function:: int uv_fs_read(uv_loop_t* loop, uv_fs_t* req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, uv_fs_cb cb)
+.. c:function:: int uv_fs_read(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, uv_fs_cb cb)
 
     Equivalent to :man:`preadv(2)`.
+
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
 
 .. c:function:: int uv_fs_unlink(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb)
 
     Equivalent to :man:`unlink(2)`.
 
-.. c:function:: int uv_fs_write(uv_loop_t* loop, uv_fs_t* req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, uv_fs_cb cb)
+.. c:function:: int uv_fs_write(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, uv_fs_cb cb)
 
     Equivalent to :man:`pwritev(2)`.
+
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
 
 .. c:function:: int uv_fs_mkdir(uv_loop_t* loop, uv_fs_t* req, const char* path, int mode, uv_fs_cb cb)
 
@@ -221,26 +227,34 @@ API
         ext3 and ext4 at the time of this writing), check the :man:`getdents(2)` man page.
 
 .. c:function:: int uv_fs_stat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb)
-.. c:function:: int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb)
+.. c:function:: int uv_fs_fstat(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, uv_fs_cb cb)
 .. c:function:: int uv_fs_lstat(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_fs_cb cb)
 
     Equivalent to :man:`stat(2)`, :man:`fstat(2)` and :man:`lstat(2)` respectively.
+
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
 
 .. c:function:: int uv_fs_rename(uv_loop_t* loop, uv_fs_t* req, const char* path, const char* new_path, uv_fs_cb cb)
 
     Equivalent to :man:`rename(2)`.
 
-.. c:function:: int uv_fs_fsync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb)
+.. c:function:: int uv_fs_fsync(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, uv_fs_cb cb)
 
     Equivalent to :man:`fsync(2)`.
 
-.. c:function:: int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_fs_cb cb)
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
+
+.. c:function:: int uv_fs_fdatasync(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, uv_fs_cb cb)
 
     Equivalent to :man:`fdatasync(2)`.
 
-.. c:function:: int uv_fs_ftruncate(uv_loop_t* loop, uv_fs_t* req, uv_file file, int64_t offset, uv_fs_cb cb)
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
+
+.. c:function:: int uv_fs_ftruncate(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, int64_t offset, uv_fs_cb cb)
 
     Equivalent to :man:`ftruncate(2)`.
+
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
 
 .. c:function:: int uv_fs_copyfile(uv_loop_t* loop, uv_fs_t* req, const char* path, const char* new_path, int flags, uv_fs_cb cb)
 
@@ -258,21 +272,25 @@ API
 
     .. versionadded:: 1.14.0
 
-.. c:function:: int uv_fs_sendfile(uv_loop_t* loop, uv_fs_t* req, uv_file out_fd, uv_file in_fd, int64_t in_offset, size_t length, uv_fs_cb cb)
+.. c:function:: int uv_fs_sendfile(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t out_fd, uv_os_fd_t in_fd, int64_t in_offset, size_t length, uv_fs_cb cb)
 
     Limited equivalent to :man:`sendfile(2)`.
+
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
 
 .. c:function:: int uv_fs_access(uv_loop_t* loop, uv_fs_t* req, const char* path, int mode, uv_fs_cb cb)
 
     Equivalent to :man:`access(2)` on Unix. Windows uses ``GetFileAttributesW()``.
 
 .. c:function:: int uv_fs_chmod(uv_loop_t* loop, uv_fs_t* req, const char* path, int mode, uv_fs_cb cb)
-.. c:function:: int uv_fs_fchmod(uv_loop_t* loop, uv_fs_t* req, uv_file file, int mode, uv_fs_cb cb)
+.. c:function:: int uv_fs_fchmod(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, int mode, uv_fs_cb cb)
 
     Equivalent to :man:`chmod(2)` and :man:`fchmod(2)` respectively.
 
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
+
 .. c:function:: int uv_fs_utime(uv_loop_t* loop, uv_fs_t* req, const char* path, double atime, double mtime, uv_fs_cb cb)
-.. c:function:: int uv_fs_futime(uv_loop_t* loop, uv_fs_t* req, uv_file file, double atime, double mtime, uv_fs_cb cb)
+.. c:function:: int uv_fs_futime(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, double atime, double mtime, uv_fs_cb cb)
 
     Equivalent to :man:`utime(2)` and :man:`futime(2)` respectively.
 
@@ -281,6 +299,7 @@ API
       versions but will return ``UV_ENOSYS``.
 
     .. versionchanged:: 1.10.0 sub-second precission is supported on Windows
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
 
 .. c:function:: int uv_fs_link(uv_loop_t* loop, uv_fs_t* req, const char* path, const char* new_path, uv_fs_cb cb)
 
@@ -326,19 +345,17 @@ API
         The background story and some more details on these issues can be checked
         `here <https://github.com/nodejs/node/issues/7726>`_.
 
-    .. note::
-      This function is not implemented on Windows XP and Windows Server 2003.
-      On these systems, UV_ENOSYS is returned.
-
     .. versionadded:: 1.8.0
 
 .. c:function:: int uv_fs_chown(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb)
-.. c:function:: int uv_fs_fchown(uv_loop_t* loop, uv_fs_t* req, uv_file file, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb)
+.. c:function:: int uv_fs_fchown(uv_loop_t* loop, uv_fs_t* req, uv_os_fd_t file, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb)
 
     Equivalent to :man:`chown(2)` and :man:`fchown(2)` respectively.
 
     .. note::
         These functions are not implemented on Windows.
+
+    .. versionchanged:: 2.0.0 replace uv_file with uv_os_fd_t
 
 .. c:function:: uv_fs_type uv_fs_get_type(const uv_fs_t* req)
 
@@ -375,6 +392,19 @@ API
 Helper functions
 ----------------
 
+.. c:function:: uv_os_fd_t uv_convert_fd_to_handle(int fd)
+
+   Destructively converts a file descriptor in the C runtime
+   to the OS-dependent handle.
+   Upon return, the input ``fd`` parameter is invalid and closed.
+
+   This is only useful on Windows, where it calls DuplicateHandle
+   to make a new HANDLE independent from the MSVCRT library,
+   and then closes the handle out of the C runtime to avoid leaks
+   and to avoid having multiple handles open for the same underlying resource.
+
+    .. versionadded:: 2.0.0 replace uv_file with uv_os_fd_t
+
 .. c:function:: uv_os_fd_t uv_get_osfhandle(int fd)
 
    For a file descriptor in the C runtime, get the OS-dependent handle.
@@ -383,6 +413,9 @@ Helper functions
    any attempts to close it or to use it after closing the fd may lead to malfunction.
 
     .. versionadded:: 1.12.0
+
+    .. versionadded:: 2.0.0 replace uv_file with uv_os_fd_t
+
 
 File open constants
 -------------------

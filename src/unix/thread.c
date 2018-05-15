@@ -47,7 +47,6 @@ int pthread_barrier_init(pthread_barrier_t* barrier,
                          const void* barrier_attr,
                          unsigned count) {
   int rc;
-  _uv_barrier* b;
 
   if (barrier == NULL || count == 0)
     return EINVAL;
@@ -55,91 +54,77 @@ int pthread_barrier_init(pthread_barrier_t* barrier,
   if (barrier_attr != NULL)
     return ENOTSUP;
 
-  b = uv__malloc(sizeof(*b));
-  if (b == NULL)
-    return ENOMEM;
+  barrier->in = 0;
+  barrier->out = 0;
+  barrier->threshold = count;
 
-  b->in = 0;
-  b->out = 0;
-  b->threshold = count;
-
-  if ((rc = pthread_mutex_init(&b->mutex, NULL)) != 0)
-    goto error2;
-  if ((rc = pthread_cond_init(&b->cond, NULL)) != 0)
+  if ((rc = pthread_mutex_init(&barrier->mutex, NULL)) != 0)
+    return rc;
+  if ((rc = pthread_cond_init(&barrier->cond, NULL)) != 0)
     goto error;
 
-  barrier->b = b;
   return 0;
 
 error:
-  pthread_mutex_destroy(&b->mutex);
-error2:
-  uv__free(b);
+  pthread_mutex_destroy(&barrier->mutex);
   return rc;
 }
 
 int pthread_barrier_wait(pthread_barrier_t* barrier) {
   int rc;
-  _uv_barrier* b;
 
-  if (barrier == NULL || barrier->b == NULL)
+  if (barrier == NULL)
     return EINVAL;
 
-  b = barrier->b;
   /* Lock the mutex*/
-  if ((rc = pthread_mutex_lock(&b->mutex)) != 0)
+  if ((rc = pthread_mutex_lock(&barrier->mutex)) != 0)
     return rc;
 
   /* Increment the count. If this is the first thread to reach the threshold,
      wake up waiters, unlock the mutex, then return
      PTHREAD_BARRIER_SERIAL_THREAD. */
-  if (++b->in == b->threshold) {
-    b->in = 0;
-    b->out = b->threshold - 1;
-    rc = pthread_cond_signal(&b->cond);
+  if (++barrier->in == barrier->threshold) {
+    barrier->in = 0;
+    barrier->out = barrier->threshold - 1;
+    rc = pthread_cond_signal(&barrier->cond);
     assert(rc == 0);
 
-    pthread_mutex_unlock(&b->mutex);
+    pthread_mutex_unlock(&barrier->mutex);
     return PTHREAD_BARRIER_SERIAL_THREAD;
   }
   /* Otherwise, wait for other threads until in is set to 0,
      then return 0 to indicate this is not the first thread. */
   do {
-    if ((rc = pthread_cond_wait(&b->cond, &b->mutex)) != 0)
+    if ((rc = pthread_cond_wait(&barrier->cond, &barrier->mutex)) != 0)
       break;
-  } while (b->in != 0);
+  } while (barrier->in != 0);
 
   /* mark thread exit */
-  b->out--;
-  pthread_cond_signal(&b->cond);
-  pthread_mutex_unlock(&b->mutex);
+  barrier->out--;
+  pthread_cond_signal(&barrier->cond);
+  pthread_mutex_unlock(&barrier->mutex);
   return rc;
 }
 
 int pthread_barrier_destroy(pthread_barrier_t* barrier) {
   int rc;
-  _uv_barrier* b;
 
-  if (barrier == NULL || barrier->b == NULL)
+  if (barrier == NULL)
     return EINVAL;
 
-  b = barrier->b;
-
-  if ((rc = pthread_mutex_lock(&b->mutex)) != 0)
+  if ((rc = pthread_mutex_lock(&barrier->mutex)) != 0)
     return rc;
 
-  if (b->in > 0 || b->out > 0)
+  if (barrier->in > 0 || barrier->out > 0)
     rc = EBUSY;
 
-  pthread_mutex_unlock(&b->mutex);
+  pthread_mutex_unlock(&barrier->mutex);
 
   if (rc)
     return rc;
 
-  pthread_cond_destroy(&b->cond);
-  pthread_mutex_destroy(&b->mutex);
-  uv__free(barrier->b);
-  barrier->b = NULL;
+  pthread_cond_destroy(&barrier->cond);
+  pthread_mutex_destroy(&barrier->mutex);
   return 0;
 }
 #endif
@@ -200,7 +185,7 @@ int uv_thread_create(uv_thread_t *tid, void (*entry)(void *arg), void *arg) {
   if (attr != NULL)
     pthread_attr_destroy(attr);
 
-  return -err;
+  return UV__ERR(err);
 }
 
 
@@ -209,7 +194,7 @@ uv_thread_t uv_thread_self(void) {
 }
 
 int uv_thread_join(uv_thread_t *tid) {
-  return -pthread_join(*tid, NULL);
+  return UV__ERR(pthread_join(*tid, NULL));
 }
 
 
@@ -220,7 +205,7 @@ int uv_thread_equal(const uv_thread_t* t1, const uv_thread_t* t2) {
 
 int uv_mutex_init(uv_mutex_t* mutex) {
 #if defined(NDEBUG) || !defined(PTHREAD_MUTEX_ERRORCHECK)
-  return -pthread_mutex_init(mutex, NULL);
+  return UV__ERR(pthread_mutex_init(mutex, NULL));
 #else
   pthread_mutexattr_t attr;
   int err;
@@ -236,7 +221,7 @@ int uv_mutex_init(uv_mutex_t* mutex) {
   if (pthread_mutexattr_destroy(&attr))
     abort();
 
-  return -err;
+  return UV__ERR(err);
 #endif
 }
 
@@ -256,7 +241,7 @@ int uv_mutex_init_recursive(uv_mutex_t* mutex) {
   if (pthread_mutexattr_destroy(&attr))
     abort();
 
-  return -err;
+  return UV__ERR(err);
 }
 
 
@@ -279,7 +264,7 @@ int uv_mutex_trylock(uv_mutex_t* mutex) {
   if (err) {
     if (err != EBUSY && err != EAGAIN)
       abort();
-    return -EBUSY;
+    return UV_EBUSY;
   }
 
   return 0;
@@ -293,7 +278,7 @@ void uv_mutex_unlock(uv_mutex_t* mutex) {
 
 
 int uv_rwlock_init(uv_rwlock_t* rwlock) {
-  return -pthread_rwlock_init(rwlock, NULL);
+  return UV__ERR(pthread_rwlock_init(rwlock, NULL));
 }
 
 
@@ -316,7 +301,7 @@ int uv_rwlock_tryrdlock(uv_rwlock_t* rwlock) {
   if (err) {
     if (err != EBUSY && err != EAGAIN)
       abort();
-    return -EBUSY;
+    return UV_EBUSY;
   }
 
   return 0;
@@ -342,7 +327,7 @@ int uv_rwlock_trywrlock(uv_rwlock_t* rwlock) {
   if (err) {
     if (err != EBUSY && err != EAGAIN)
       abort();
-    return -EBUSY;
+    return UV_EBUSY;
   }
 
   return 0;
@@ -369,12 +354,12 @@ int uv_sem_init(uv_sem_t* sem, unsigned int value) {
   if (err == KERN_SUCCESS)
     return 0;
   if (err == KERN_INVALID_ARGUMENT)
-    return -EINVAL;
+    return UV_EINVAL;
   if (err == KERN_RESOURCE_SHORTAGE)
-    return -ENOMEM;
+    return UV_ENOMEM;
 
   abort();
-  return -EINVAL;  /* Satisfy the compiler. */
+  return UV_EINVAL;  /* Satisfy the compiler. */
 }
 
 
@@ -413,10 +398,10 @@ int uv_sem_trywait(uv_sem_t* sem) {
   if (err == KERN_SUCCESS)
     return 0;
   if (err == KERN_OPERATION_TIMED_OUT)
-    return -EAGAIN;
+    return UV_EAGAIN;
 
   abort();
-  return -EINVAL;  /* Satisfy the compiler. */
+  return UV_EINVAL;  /* Satisfy the compiler. */
 }
 
 #elif defined(__MVS__)
@@ -433,14 +418,14 @@ int uv_sem_init(uv_sem_t* sem, unsigned int value) {
 
   semid = semget(IPC_PRIVATE, 1, S_IRUSR | S_IWUSR);
   if (semid == -1)
-    return -errno;
+    return UV__ERR(errno);
 
   arg.val = value;
   if (-1 == semctl(semid, 0, SETVAL, arg)) {
     err = errno;
     if (-1 == semctl(*sem, 0, IPC_RMID))
       abort();
-    return -err;
+    return UV__ERR(err);
   }
 
   *sem = semid;
@@ -493,7 +478,7 @@ int uv_sem_trywait(uv_sem_t* sem) {
 
   if (op_status) {
     if (errno == EAGAIN)
-      return -EAGAIN;
+      return UV_EAGAIN;
     abort();
   }
 
@@ -504,7 +489,7 @@ int uv_sem_trywait(uv_sem_t* sem) {
 
 int uv_sem_init(uv_sem_t* sem, unsigned int value) {
   if (sem_init(sem, 0, value))
-    return -errno;
+    return UV__ERR(errno);
   return 0;
 }
 
@@ -542,7 +527,7 @@ int uv_sem_trywait(uv_sem_t* sem) {
 
   if (r) {
     if (errno == EAGAIN)
-      return -EAGAIN;
+      return UV_EAGAIN;
     abort();
   }
 
@@ -555,7 +540,7 @@ int uv_sem_trywait(uv_sem_t* sem) {
 #if defined(__APPLE__) && defined(__MACH__) || defined(__MVS__)
 
 int uv_cond_init(uv_cond_t* cond) {
-  return -pthread_cond_init(cond, NULL);
+  return UV__ERR(pthread_cond_init(cond, NULL));
 }
 
 #else /* !(defined(__APPLE__) && defined(__MACH__)) */
@@ -566,7 +551,7 @@ int uv_cond_init(uv_cond_t* cond) {
 
   err = pthread_condattr_init(&attr);
   if (err)
-    return -err;
+    return UV__ERR(err);
 
 #if !(defined(__ANDROID_API__) && __ANDROID_API__ < 21)
   err = pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
@@ -588,7 +573,7 @@ error:
   pthread_cond_destroy(cond);
 error2:
   pthread_condattr_destroy(&attr);
-  return -err;
+  return UV__ERR(err);
 }
 
 #endif /* defined(__APPLE__) && defined(__MACH__) */
@@ -646,13 +631,22 @@ void uv_cond_wait(uv_cond_t* cond, uv_mutex_t* mutex) {
 int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
   int r;
   struct timespec ts;
+#if defined(__MVS__)
+  struct timeval tv;
+#endif
 
 #if defined(__APPLE__) && defined(__MACH__)
   ts.tv_sec = timeout / NANOSEC;
   ts.tv_nsec = timeout % NANOSEC;
   r = pthread_cond_timedwait_relative_np(cond, mutex, &ts);
 #else
+#if defined(__MVS__)
+  if (gettimeofday(&tv, NULL))
+    abort();
+  timeout += tv.tv_sec * NANOSEC + tv.tv_usec * 1e3;
+#else
   timeout += uv__hrtime(UV_CLOCK_PRECISE);
+#endif
   ts.tv_sec = timeout / NANOSEC;
   ts.tv_nsec = timeout % NANOSEC;
 #if defined(__ANDROID_API__) && __ANDROID_API__ < 21
@@ -672,15 +666,15 @@ int uv_cond_timedwait(uv_cond_t* cond, uv_mutex_t* mutex, uint64_t timeout) {
     return 0;
 
   if (r == ETIMEDOUT)
-    return -ETIMEDOUT;
+    return UV_ETIMEDOUT;
 
   abort();
-  return -EINVAL;  /* Satisfy the compiler. */
+  return UV_EINVAL;  /* Satisfy the compiler. */
 }
 
 
 int uv_barrier_init(uv_barrier_t* barrier, unsigned int count) {
-  return -pthread_barrier_init(barrier, NULL, count);
+  return UV__ERR(pthread_barrier_init(barrier, NULL, count));
 }
 
 
@@ -699,7 +693,7 @@ int uv_barrier_wait(uv_barrier_t* barrier) {
 
 
 int uv_key_create(uv_key_t* key) {
-  return -pthread_key_create(key, NULL);
+  return UV__ERR(pthread_key_create(key, NULL));
 }
 
 

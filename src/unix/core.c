@@ -40,6 +40,7 @@
 #include <sys/uio.h> /* writev */
 #include <sys/resource.h> /* getrusage */
 #include <pwd.h>
+#include <sched.h>
 
 #ifdef __sun
 # include <netdb.h> /* MAXHOSTNAMELEN on Solaris */
@@ -63,8 +64,10 @@
 # include <sys/sysctl.h>
 # include <sys/filio.h>
 # include <sys/wait.h>
+# include <sys/param.h>
+# include <sys/cpuset.h>
 # define UV__O_CLOEXEC O_CLOEXEC
-# if defined(__FreeBSD__) && __FreeBSD__ >= 10
+# if defined(__FreeBSD__)
 #  define uv__accept4 accept4
 # endif
 # if defined(__NetBSD__)
@@ -73,9 +76,6 @@
 # if (defined(__FreeBSD__) && __FreeBSD__ >= 10) || defined(__NetBSD__)
 #  define UV__SOCK_NONBLOCK SOCK_NONBLOCK
 #  define UV__SOCK_CLOEXEC  SOCK_CLOEXEC
-# endif
-# if !defined(F_DUP2FD_CLOEXEC) && defined(_F_DUP2FD_CLOEXEC)
-#  define F_DUP2FD_CLOEXEC  _F_DUP2FD_CLOEXEC
 # endif
 #endif
 
@@ -191,14 +191,14 @@ int uv__socket_sockopt(uv_handle_t* handle, int optname, int* value) {
   socklen_t len;
 
   if (handle == NULL || value == NULL)
-    return -EINVAL;
+    return UV_EINVAL;
 
   if (handle->type == UV_TCP || handle->type == UV_NAMED_PIPE)
     fd = uv__stream_fd((uv_stream_t*) handle);
   else if (handle->type == UV_UDP)
     fd = ((uv_udp_t *) handle)->io_watcher.fd;
   else
-    return -ENOTSUP;
+    return UV_ENOTSUP;
 
   len = sizeof(*value);
 
@@ -208,7 +208,7 @@ int uv__socket_sockopt(uv_handle_t* handle, int optname, int* value) {
     r = setsockopt(fd, SOL_SOCKET, optname, (const void*) value, len);
 
   if (r < 0)
-    return -errno;
+    return UV__ERR(errno);
 
   return 0;
 }
@@ -308,7 +308,7 @@ int uv_is_closing(const uv_handle_t* handle) {
 }
 
 
-int uv_backend_fd(const uv_loop_t* loop) {
+uv_os_fd_t uv_backend_fd(const uv_loop_t* loop) {
   return loop->backend_fd;
 }
 
@@ -418,12 +418,12 @@ int uv__socket(int domain, int type, int protocol) {
     return sockfd;
 
   if (errno != EINVAL)
-    return -errno;
+    return UV__ERR(errno);
 #endif
 
   sockfd = socket(domain, type, protocol);
   if (sockfd == -1)
-    return -errno;
+    return UV__ERR(errno);
 
   err = uv__nonblock(sockfd, 1);
   if (err == 0)
@@ -487,7 +487,7 @@ int uv__accept(int sockfd) {
       continue;
 
     if (errno != ENOSYS)
-      return -errno;
+      return UV__ERR(errno);
 
     no_accept4 = 1;
 skip:
@@ -497,7 +497,7 @@ skip:
     if (peerfd == -1) {
       if (errno == EINTR)
         continue;
-      return -errno;
+      return UV__ERR(errno);
     }
 
     err = uv__cloexec(peerfd, 1);
@@ -523,8 +523,8 @@ int uv__close_nocheckstdio(int fd) {
   saved_errno = errno;
   rc = close(fd);
   if (rc == -1) {
-    rc = -errno;
-    if (rc == -EINTR || rc == -EINPROGRESS)
+    rc = UV__ERR(errno);
+    if (rc == UV_EINTR || rc == UV__ERR(EINPROGRESS))
       rc = 0;    /* The close is in progress, not an error. */
     errno = saved_errno;
   }
@@ -550,7 +550,7 @@ int uv__nonblock_ioctl(int fd, int set) {
   while (r == -1 && errno == EINTR);
 
   if (r)
-    return -errno;
+    return UV__ERR(errno);
 
   return 0;
 }
@@ -565,7 +565,7 @@ int uv__cloexec_ioctl(int fd, int set) {
   while (r == -1 && errno == EINTR);
 
   if (r)
-    return -errno;
+    return UV__ERR(errno);
 
   return 0;
 }
@@ -581,7 +581,7 @@ int uv__nonblock_fcntl(int fd, int set) {
   while (r == -1 && errno == EINTR);
 
   if (r == -1)
-    return -errno;
+    return UV__ERR(errno);
 
   /* Bail out now if already set/clear. */
   if (!!(r & O_NONBLOCK) == !!set)
@@ -597,7 +597,7 @@ int uv__nonblock_fcntl(int fd, int set) {
   while (r == -1 && errno == EINTR);
 
   if (r)
-    return -errno;
+    return UV__ERR(errno);
 
   return 0;
 }
@@ -612,7 +612,7 @@ int uv__cloexec_fcntl(int fd, int set) {
   while (r == -1 && errno == EINTR);
 
   if (r == -1)
-    return -errno;
+    return UV__ERR(errno);
 
   /* Bail out now if already set/clear. */
   if (!!(r & FD_CLOEXEC) == !!set)
@@ -628,7 +628,7 @@ int uv__cloexec_fcntl(int fd, int set) {
   while (r == -1 && errno == EINTR);
 
   if (r)
-    return -errno;
+    return UV__ERR(errno);
 
   return 0;
 }
@@ -643,7 +643,7 @@ int uv__dup(int fd) {
   fd = dup(fd);
 
   if (fd == -1)
-    return -errno;
+    return UV__ERR(errno);
 
   err = uv__cloexec(fd, 1);
   if (err) {
@@ -667,10 +667,10 @@ ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
     if (rc != -1)
       return rc;
     if (errno != EINVAL)
-      return -errno;
+      return UV__ERR(errno);
     rc = recvmsg(fd, msg, flags);
     if (rc == -1)
-      return -errno;
+      return UV__ERR(errno);
     no_msg_cmsg_cloexec = 1;
   } else {
     rc = recvmsg(fd, msg, flags);
@@ -679,7 +679,7 @@ ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
   rc = recvmsg(fd, msg, flags);
 #endif
   if (rc == -1)
-    return -errno;
+    return UV__ERR(errno);
   if (msg->msg_controllen == 0)
     return rc;
   for (cmsg = CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = CMSG_NXTHDR(msg, cmsg))
@@ -695,10 +695,10 @@ ssize_t uv__recvmsg(int fd, struct msghdr* msg, int flags) {
 
 int uv_cwd(char* buffer, size_t* size) {
   if (buffer == NULL || size == NULL)
-    return -EINVAL;
+    return UV_EINVAL;
 
   if (getcwd(buffer, *size) == NULL)
-    return -errno;
+    return UV__ERR(errno);
 
   *size = strlen(buffer);
   if (*size > 1 && buffer[*size - 1] == '/') {
@@ -712,7 +712,7 @@ int uv_cwd(char* buffer, size_t* size) {
 
 int uv_chdir(const char* dir) {
   if (chdir(dir))
-    return -errno;
+    return UV__ERR(errno);
 
   return 0;
 }
@@ -749,11 +749,11 @@ int uv_fileno(const uv_handle_t* handle, uv_os_fd_t* fd) {
     break;
 
   default:
-    return -EINVAL;
+    return UV_EINVAL;
   }
 
   if (uv__is_closing(handle) || fd_out == -1)
-    return -EBADF;
+    return UV_EBADF;
 
   *fd = fd_out;
   return 0;
@@ -931,7 +931,7 @@ int uv_getrusage(uv_rusage_t* rusage) {
   struct rusage usage;
 
   if (getrusage(RUSAGE_SELF, &usage))
-    return -errno;
+    return UV__ERR(errno);
 
   rusage->ru_utime.tv_sec = usage.ru_utime.tv_sec;
   rusage->ru_utime.tv_usec = usage.ru_utime.tv_usec;
@@ -973,7 +973,7 @@ int uv__open_cloexec(const char* path, int flags) {
       return fd;
 
     if (errno != EINVAL)
-      return -errno;
+      return UV__ERR(errno);
 
     /* O_CLOEXEC not supported. */
     no_cloexec = 1;
@@ -982,7 +982,7 @@ int uv__open_cloexec(const char* path, int flags) {
 
   fd = open(path, flags);
   if (fd == -1)
-    return -errno;
+    return UV__ERR(errno);
 
   err = uv__cloexec(fd, 1);
   if (err) {
@@ -999,14 +999,14 @@ int uv__dup2_cloexec(int oldfd, int newfd) {
 #if (defined(__FreeBSD__) && __FreeBSD__ >= 10) || defined(__NetBSD__)
   r = dup3(oldfd, newfd, O_CLOEXEC);
   if (r == -1)
-    return -errno;
+    return UV__ERR(errno);
   return r;
 #elif defined(__FreeBSD__) && defined(F_DUP2FD_CLOEXEC)
   r = fcntl(oldfd, F_DUP2FD_CLOEXEC, newfd);
   if (r != -1)
     return r;
   if (errno != EINVAL)
-    return -errno;
+    return UV__ERR(errno);
   /* Fall through. */
 #elif defined(__linux__)
   static int no_dup3;
@@ -1017,7 +1017,7 @@ int uv__dup2_cloexec(int oldfd, int newfd) {
     if (r != -1)
       return r;
     if (errno != ENOSYS)
-      return -errno;
+      return UV__ERR(errno);
     /* Fall through. */
     no_dup3 = 1;
   }
@@ -1033,7 +1033,7 @@ int uv__dup2_cloexec(int oldfd, int newfd) {
 #endif
 
     if (r == -1)
-      return -errno;
+      return UV__ERR(errno);
 
     err = uv__cloexec(newfd, 1);
     if (err) {
@@ -1053,7 +1053,7 @@ int uv_os_homedir(char* buffer, size_t* size) {
   int r;
 
   if (buffer == NULL || size == NULL || *size == 0)
-    return -EINVAL;
+    return UV_EINVAL;
 
   /* Check if the HOME environment variable is set first */
   buf = getenv("HOME");
@@ -1063,7 +1063,7 @@ int uv_os_homedir(char* buffer, size_t* size) {
 
     if (len >= *size) {
       *size = len + 1;
-      return -ENOBUFS;
+      return UV_ENOBUFS;
     }
 
     memcpy(buffer, buf, len + 1);
@@ -1084,7 +1084,7 @@ int uv_os_homedir(char* buffer, size_t* size) {
   if (len >= *size) {
     *size = len + 1;
     uv_os_free_passwd(&pwd);
-    return -ENOBUFS;
+    return UV_ENOBUFS;
   }
 
   memcpy(buffer, pwd.homedir, len + 1);
@@ -1100,7 +1100,7 @@ int uv_os_tmpdir(char* buffer, size_t* size) {
   size_t len;
 
   if (buffer == NULL || size == NULL || *size == 0)
-    return -EINVAL;
+    return UV_EINVAL;
 
 #define CHECK_ENV_VAR(name)                                                   \
   do {                                                                        \
@@ -1130,7 +1130,7 @@ return_buffer:
 
   if (len >= *size) {
     *size = len + 1;
-    return -ENOBUFS;
+    return UV_ENOBUFS;
   }
 
   /* The returned directory should not have a trailing slash. */
@@ -1155,6 +1155,7 @@ int uv__getpwuid_r(uv_passwd_t* pwd) {
   size_t name_size;
   size_t homedir_size;
   size_t shell_size;
+  size_t gecos_size;
   long initsize;
   int r;
 #if defined(__ANDROID_API__) && __ANDROID_API__ < 21
@@ -1162,11 +1163,11 @@ int uv__getpwuid_r(uv_passwd_t* pwd) {
 
   getpwuid_r = dlsym(RTLD_DEFAULT, "getpwuid_r");
   if (getpwuid_r == NULL)
-    return -ENOSYS;
+    return UV_ENOSYS;
 #endif
 
   if (pwd == NULL)
-    return -EINVAL;
+    return UV_EINVAL;
 
   initsize = sysconf(_SC_GETPW_R_SIZE_MAX);
 
@@ -1183,7 +1184,7 @@ int uv__getpwuid_r(uv_passwd_t* pwd) {
     buf = uv__malloc(bufsize);
 
     if (buf == NULL)
-      return -ENOMEM;
+      return UV_ENOMEM;
 
     r = getpwuid_r(uid, &pw, buf, bufsize, &result);
 
@@ -1200,18 +1201,31 @@ int uv__getpwuid_r(uv_passwd_t* pwd) {
 
   if (result == NULL) {
     uv__free(buf);
-    return -ENOENT;
+    return UV_ENOENT;
   }
 
-  /* Allocate memory for the username, shell, and home directory */
+  /* Allocate memory for the username, gecos, shell, and home directory. */
   name_size = strlen(pw.pw_name) + 1;
   homedir_size = strlen(pw.pw_dir) + 1;
   shell_size = strlen(pw.pw_shell) + 1;
-  pwd->username = uv__malloc(name_size + homedir_size + shell_size);
+
+#ifdef __MVS__
+  gecos_size = 0; /* pw_gecos does not exist on zOS. */
+#else
+  if (pw.pw_gecos != NULL)
+    gecos_size = strlen(pw.pw_gecos) + 1;
+  else
+    gecos_size = 0;
+#endif
+
+  pwd->username = uv__malloc(name_size +
+                             homedir_size +
+                             shell_size +
+                             gecos_size);
 
   if (pwd->username == NULL) {
     uv__free(buf);
-    return -ENOMEM;
+    return UV_ENOMEM;
   }
 
   /* Copy the username */
@@ -1224,6 +1238,18 @@ int uv__getpwuid_r(uv_passwd_t* pwd) {
   /* Copy the shell */
   pwd->shell = pwd->homedir + homedir_size;
   memcpy(pwd->shell, pw.pw_shell, shell_size);
+
+  /* Copy the gecos field */
+#ifdef __MVS__
+  pwd->gecos = NULL;  /* pw_gecos does not exist on zOS. */
+#else
+  if (pw.pw_gecos == NULL) {
+    pwd->gecos = NULL;
+  } else {
+    pwd->gecos = pwd->shell + shell_size;
+    memcpy(pwd->gecos, pw.pw_gecos, gecos_size);
+  }
+#endif
 
   /* Copy the uid and gid */
   pwd->uid = pw.pw_uid;
@@ -1240,7 +1266,7 @@ void uv_os_free_passwd(uv_passwd_t* pwd) {
     return;
 
   /*
-    The memory for name, shell, and homedir are allocated in a single
+    The memory for name, shell, homedir, and gecos are allocated in a single
     uv__malloc() call. The base of the pointer is stored in pwd->username, so
     that is the field that needs to be freed.
   */
@@ -1248,6 +1274,7 @@ void uv_os_free_passwd(uv_passwd_t* pwd) {
   pwd->username = NULL;
   pwd->shell = NULL;
   pwd->homedir = NULL;
+  pwd->gecos = NULL;
 }
 
 
@@ -1267,18 +1294,18 @@ int uv_os_getenv(const char* name, char* buffer, size_t* size) {
   size_t len;
 
   if (name == NULL || buffer == NULL || size == NULL || *size == 0)
-    return -EINVAL;
+    return UV_EINVAL;
 
   var = getenv(name);
 
   if (var == NULL)
-    return -ENOENT;
+    return UV_ENOENT;
 
   len = strlen(var);
 
   if (len >= *size) {
     *size = len + 1;
-    return -ENOBUFS;
+    return UV_ENOBUFS;
   }
 
   memcpy(buffer, var, len + 1);
@@ -1290,10 +1317,10 @@ int uv_os_getenv(const char* name, char* buffer, size_t* size) {
 
 int uv_os_setenv(const char* name, const char* value) {
   if (name == NULL || value == NULL)
-    return -EINVAL;
+    return UV_EINVAL;
 
   if (setenv(name, value, 1) != 0)
-    return -errno;
+    return UV__ERR(errno);
 
   return 0;
 }
@@ -1301,10 +1328,10 @@ int uv_os_setenv(const char* name, const char* value) {
 
 int uv_os_unsetenv(const char* name) {
   if (name == NULL)
-    return -EINVAL;
+    return UV_EINVAL;
 
   if (unsetenv(name) != 0)
-    return -errno;
+    return UV__ERR(errno);
 
   return 0;
 }
@@ -1321,29 +1348,23 @@ int uv_os_gethostname(char* buffer, size_t* size) {
   size_t len;
 
   if (buffer == NULL || size == NULL || *size == 0)
-    return -EINVAL;
+    return UV_EINVAL;
 
   if (gethostname(buf, sizeof(buf)) != 0)
-    return -errno;
+    return UV__ERR(errno);
 
   buf[sizeof(buf) - 1] = '\0'; /* Null terminate, just to be safe. */
   len = strlen(buf);
 
   if (len >= *size) {
     *size = len + 1;
-    return -ENOBUFS;
+    return UV_ENOBUFS;
   }
 
   memcpy(buffer, buf, len + 1);
   *size = len;
   return 0;
 }
-
-
-uv_os_fd_t uv_get_osfhandle(int fd) {
-  return fd;
-}
-
 
 uv_pid_t uv_os_getpid(void) {
   return getpid();
@@ -1352,4 +1373,12 @@ uv_pid_t uv_os_getpid(void) {
 
 uv_pid_t uv_os_getppid(void) {
   return getppid();
+}
+
+int uv_cpumask_size(void) {
+#if defined(__linux__) || defined(__FreeBSD__)
+  return CPU_SETSIZE;
+#else
+  return UV_ENOTSUP;
+#endif
 }

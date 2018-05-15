@@ -79,12 +79,12 @@ static void create_dir(const char* name) {
 
 static void create_file(const char* name) {
   int r;
-  uv_file file;
+  uv_os_fd_t file;
   uv_fs_t req;
 
   r = uv_fs_open(NULL, &req, name, O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR, NULL);
-  ASSERT(r >= 0);
-  file = r;
+  ASSERT(r == 0);
+  file = (uv_os_fd_t)req.result;
   uv_fs_req_cleanup(&req);
   r = uv_fs_close(NULL, &req, file, NULL);
   ASSERT(r == 0);
@@ -93,13 +93,13 @@ static void create_file(const char* name) {
 
 static void touch_file(const char* name) {
   int r;
-  uv_file file;
+  uv_os_fd_t file;
   uv_fs_t req;
   uv_buf_t buf;
 
   r = uv_fs_open(NULL, &req, name, O_RDWR, 0, NULL);
-  ASSERT(r >= 0);
-  file = r;
+  ASSERT(r == 0);
+  file = (uv_os_fd_t)req.result;
   uv_fs_req_cleanup(&req);
 
   buf = uv_buf_init("foo", 4);
@@ -199,7 +199,7 @@ static void fs_event_cb_dir_multi_file(uv_fs_event_t* handle,
   fs_event_cb_called++;
   ASSERT(handle == &fs_event);
   ASSERT(status == 0);
-  ASSERT(events == UV_CHANGE || UV_RENAME);
+  ASSERT(events == UV_CHANGE || events == UV_RENAME);
   #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
   ASSERT(strncmp(filename, file_prefix, sizeof(file_prefix) - 1) == 0);
   #else
@@ -283,7 +283,7 @@ static void fs_event_cb_dir_multi_file_in_subdir(uv_fs_event_t* handle,
   fs_event_cb_called++;
   ASSERT(handle == &fs_event);
   ASSERT(status == 0);
-  ASSERT(events == UV_CHANGE || UV_RENAME);
+  ASSERT(events == UV_CHANGE || events == UV_RENAME);
   #if defined(__APPLE__) || defined(_WIN32) || defined(__linux__)
   ASSERT(strncmp(filename,
                  file_prefix_in_subdir,
@@ -396,6 +396,8 @@ static void timer_cb_watch_twice(uv_timer_t* handle) {
 TEST_IMPL(fs_event_watch_dir) {
 #if defined(NO_FS_EVENTS)
   RETURN_SKIP(NO_FS_EVENTS);
+#elif defined(__MVS__)
+  RETURN_SKIP("Directory watching not supported on this platform.");
 #endif
 
   uv_loop_t* loop = uv_default_loop();
@@ -820,6 +822,8 @@ static void fs_event_cb_close(uv_fs_event_t* handle, const char* filename,
 TEST_IMPL(fs_event_close_in_callback) {
 #if defined(NO_FS_EVENTS)
   RETURN_SKIP(NO_FS_EVENTS);
+#elif defined(__MVS__)
+  RETURN_SKIP("Directory watching not supported on this platform.");
 #endif
   uv_loop_t* loop;
   int r;

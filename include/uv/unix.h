@@ -42,32 +42,32 @@
 #include <pthread.h>
 #include <signal.h>
 
-#include "uv-threadpool.h"
+#include "uv/threadpool.h"
 
 #if defined(__linux__)
-# include "uv-linux.h"
+# include "uv/linux.h"
 #elif defined (__MVS__)
-# include "uv-os390.h"
+# include "uv/os390.h"
 #elif defined(_PASE)
 # include "uv-posix.h"
 #elif defined(_AIX)
-# include "uv-aix.h"
+# include "uv/aix.h"
 #elif defined(__sun)
-# include "uv-sunos.h"
+# include "uv/sunos.h"
 #elif defined(__APPLE__)
-# include "uv-darwin.h"
+# include "uv/darwin.h"
 #elif defined(__DragonFly__)       || \
       defined(__FreeBSD__)         || \
       defined(__FreeBSD_kernel__)  || \
       defined(__OpenBSD__)         || \
       defined(__NetBSD__)
-# include "uv-bsd.h"
+# include "uv/bsd.h"
 #elif defined(__CYGWIN__) || defined(__MSYS__)
-# include "uv-posix.h"
+# include "uv/posix.h"
 #endif
 
 #ifndef PTHREAD_BARRIER_SERIAL_THREAD
-# include "pthread-barrier.h"
+# include "uv/pthread-barrier.h"
 #endif
 
 #ifndef NI_MAXHOST
@@ -122,7 +122,6 @@ typedef struct uv_buf_t {
   size_t len;
 } uv_buf_t;
 
-typedef int uv_file;
 typedef int uv_os_sock_t;
 typedef int uv_os_fd_t;
 typedef pid_t uv_pid_t;
@@ -332,7 +331,7 @@ typedef struct {
 
 #define UV_FS_PRIVATE_FIELDS                                                  \
   const char *new_path;                                                       \
-  uv_file file;                                                               \
+  uv_os_fd_t file;                                                            \
   int flags;                                                                  \
   mode_t mode;                                                                \
   unsigned int nbufs;                                                         \

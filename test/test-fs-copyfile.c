@@ -22,6 +22,8 @@
 #include "uv.h"
 #include "task.h"
 
+#include <fcntl.h>
+
 #if defined(__unix__) || defined(__POSIX__) || \
     defined(__APPLE__) || defined(_AIX) || defined(__MVS__)
 #include <unistd.h> /* unlink, etc. */
@@ -35,6 +37,10 @@ static const char fixture[] = "test/fixtures/load_error.node";
 static const char dst[] = "test_file_dst";
 static int result_check_count;
 
+
+static void fail_cb(uv_fs_t* req) {
+  FATAL("fail_cb should not have been called");
+}
 
 static void handle_result(uv_fs_t* req) {
   uv_fs_t stat_req;
@@ -62,7 +68,7 @@ static void handle_result(uv_fs_t* req) {
 
 
 static void touch_file(const char* name, unsigned int size) {
-  uv_file file;
+  uv_os_fd_t file;
   uv_fs_t req;
   uv_buf_t buf;
   int r;
@@ -71,8 +77,8 @@ static void touch_file(const char* name, unsigned int size) {
   r = uv_fs_open(NULL, &req, name, O_WRONLY | O_CREAT | O_TRUNC,
                  S_IWUSR | S_IRUSR, NULL);
   uv_fs_req_cleanup(&req);
-  ASSERT(r >= 0);
-  file = r;
+  ASSERT(r == 0);
+  file = (uv_os_fd_t) req.result;
 
   buf = uv_buf_init("a", 1);
 
@@ -158,7 +164,12 @@ TEST_IMPL(fs_copyfile) {
   ASSERT(result_check_count == 5);
   uv_run(loop, UV_RUN_DEFAULT);
   ASSERT(result_check_count == 6);
-  unlink(dst); /* Cleanup */
 
+  /* If the flags are invalid, the loop should not be kept open */
+  unlink(dst);
+  r = uv_fs_copyfile(loop, &req, fixture, dst, -1, fail_cb);
+  ASSERT(r == UV_EINVAL);
+  uv_run(loop, UV_RUN_DEFAULT);
+  unlink(dst); /* Cleanup */
   return 0;
 }

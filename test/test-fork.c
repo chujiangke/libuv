@@ -335,7 +335,7 @@ TEST_IMPL(fork_signal_to_child_closed) {
     /* Note that we're deliberately not running the loop
      * in the child, and also not closing the loop's handles,
      * so the child default loop can't be cleanly closed.
-     * We need te explicitly exit to avoid an automatic failure
+     * We need to explicitly exit to avoid an automatic failure
      * in that case.
      */
     exit(0);
@@ -348,12 +348,12 @@ TEST_IMPL(fork_signal_to_child_closed) {
 
 static void create_file(const char* name) {
   int r;
-  uv_file file;
+  uv_os_fd_t file;
   uv_fs_t req;
 
   r = uv_fs_open(NULL, &req, name, O_WRONLY | O_CREAT, S_IWUSR | S_IRUSR, NULL);
-  ASSERT(r >= 0);
-  file = r;
+  ASSERT(r == 0);
+  file = req.result;
   uv_fs_req_cleanup(&req);
   r = uv_fs_close(NULL, &req, file, NULL);
   ASSERT(r == 0);
@@ -363,13 +363,13 @@ static void create_file(const char* name) {
 
 static void touch_file(const char* name) {
   int r;
-  uv_file file;
+  uv_os_fd_t file;
   uv_fs_t req;
   uv_buf_t buf;
 
   r = uv_fs_open(NULL, &req, name, O_RDWR, 0, NULL);
-  ASSERT(r >= 0);
-  file = r;
+  ASSERT(r == 0);
+  file = req.result;
   uv_fs_req_cleanup(&req);
 
   buf = uv_buf_init("foo", 4);
@@ -533,10 +533,12 @@ TEST_IMPL(fork_fs_events_file_parent_child) {
 #if defined(NO_FS_EVENTS)
   RETURN_SKIP(NO_FS_EVENTS);
 #endif
-#if defined(__sun) || defined(_AIX)
+#if defined(__sun) || defined(_AIX) || defined(__MVS__)
   /* It's not possible to implement this without additional
    * bookkeeping on SunOS. For AIX it is possible, but has to be
    * written. See https://github.com/libuv/libuv/pull/846#issuecomment-287170420
+   * TODO: On z/OS, we need to open another message queue and subscribe to the
+   * same events as the parent.
    */
   return 0;
 #else

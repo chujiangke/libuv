@@ -304,7 +304,7 @@ static void read_cb(uv_stream_t* handle,
   union handles* recv;
   uv_write_t* write_req;
 
-  if (nread == UV__EOF || nread == UV__ECONNABORTED) {
+  if (nread == UV_EOF || nread == UV_ECONNABORTED) {
     return;
   }
 
@@ -388,7 +388,8 @@ int run_ipc_send_recv_helper(uv_loop_t* loop, int inprocess) {
     r = uv_listen((uv_stream_t*)&ctx2.listen, SOMAXCONN, listen_cb);
     ASSERT(r == 0);
   } else {
-    r = uv_pipe_open(&ctx2.channel, 0);
+    uv_os_fd_t stdin_handle = uv_convert_fd_to_handle(0);
+    r = uv_pipe_open(&ctx2.channel, stdin_handle);
     ASSERT(r == 0);
 
     send_recv_start();
