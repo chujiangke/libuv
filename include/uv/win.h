@@ -19,10 +19,6 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef _WIN32_WINNT
-# define _WIN32_WINNT   0x0600
-#endif
-
 #if !defined(_SSIZE_T_) && !defined(_SSIZE_T_DEFINED)
 typedef intptr_t ssize_t;
 # define _SSIZE_T_
@@ -62,7 +58,6 @@ typedef intptr_t ssize_t;
 #define SIGBREAK             21
 #define SIGABRT              22
 #define SIGWINCH             28
-
 
 typedef int (WSAAPI* LPFN_WSARECV)
             (SOCKET socket,
@@ -120,6 +115,7 @@ typedef struct uv_buf_t {
 
 typedef SOCKET uv_os_sock_t;
 typedef HANDLE uv_os_fd_t;
+typedef int uv_pid_t;
 
 typedef HANDLE uv_thread_t;
 
@@ -233,10 +229,10 @@ typedef struct {
   } u;                                                                        \
   struct uv_req_s* next_req;
 
-#define UV_WRITE_PRIVATE_FIELDS                                               \
-  int ipc_header;                                                             \
-  uv_buf_t write_buffer;                                                      \
-  HANDLE event_handle;                                                        \
+#define UV_WRITE_PRIVATE_FIELDS \
+  int coalesced;                \
+  uv_buf_t write_buffer;        \
+  HANDLE event_handle;          \
   HANDLE wait_handle;
 
 #define UV_CONNECT_PRIVATE_FIELDS                                             \
@@ -324,16 +320,17 @@ typedef struct {
 
 #define uv_pipe_connection_fields                                             \
   uv_timer_t* eof_timer;                                                      \
-  uv_write_t ipc_header_write_req;                                            \
-  int ipc_pid;                                                                \
-  uint64_t remaining_ipc_rawdata_bytes;                                       \
-  struct {                                                                    \
-    void* queue[2];                                                           \
-    int queue_len;                                                            \
-  } pending_ipc_info;                                                         \
+  uv_write_t dummy; /* TODO: retained for ABI compat; remove this in v2.x. */ \
+  DWORD ipc_remote_pid;                                                       \
+  union {                                                                     \
+    uint32_t payload_remaining;                                               \
+    uint64_t dummy; /* TODO: retained for ABI compat; remove this in v2.x. */ \
+  } ipc_data_frame;                                                           \
+  void* ipc_xfer_queue[2];                                                    \
+  int ipc_xfer_queue_length;                                                  \
   uv_write_t* non_overlapped_writes_tail;                                     \
-  uv_mutex_t readfile_mutex;                                                  \
-  volatile HANDLE readfile_thread;
+  CRITICAL_SECTION readfile_thread_lock;                                      \
+  volatile HANDLE readfile_thread_handle;
 
 #define UV_PIPE_PRIVATE_FIELDS                                                \
   HANDLE handle;                                                              \
@@ -343,8 +340,8 @@ typedef struct {
     struct { uv_pipe_connection_fields } conn;                                \
   } pipe;
 
-/* TODO: put the parser states in an union - TTY handles are always */
-/* half-duplex so read-state can safely overlap write-state. */
+/* TODO: put the parser states in an union - TTY handles are always half-duplex
+ * so read-state can safely overlap write-state. */
 #define UV_TTY_PRIVATE_FIELDS                                                 \
   HANDLE handle;                                                              \
   union {                                                                     \
@@ -471,6 +468,7 @@ typedef struct {
       uv_buf_t bufsml[4];                                                     \
     } info;                                                                   \
     struct {                                                                  \
+      double btime;                                                           \
       double atime;                                                           \
       double mtime;                                                           \
     } time;                                                                   \
@@ -508,3 +506,28 @@ typedef struct {
 #ifndef X_OK
 #define X_OK 1
 #endif
+
+/* fs open() flags supported on this platform: */
+#define UV_FS_O_APPEND       _O_APPEND
+#define UV_FS_O_CREAT        _O_CREAT
+#define UV_FS_O_EXCL         _O_EXCL
+#define UV_FS_O_RANDOM       _O_RANDOM
+#define UV_FS_O_RDONLY       _O_RDONLY
+#define UV_FS_O_RDWR         _O_RDWR
+#define UV_FS_O_SEQUENTIAL   _O_SEQUENTIAL
+#define UV_FS_O_SHORT_LIVED  _O_SHORT_LIVED
+#define UV_FS_O_TEMPORARY    _O_TEMPORARY
+#define UV_FS_O_TRUNC        _O_TRUNC
+#define UV_FS_O_WRONLY       _O_WRONLY
+
+/* fs open() flags supported on other platforms (or mapped on this platform): */
+#define UV_FS_O_DIRECT       0x02000000 /* FILE_FLAG_NO_BUFFERING */
+#define UV_FS_O_DIRECTORY    0
+#define UV_FS_O_DSYNC        0x04000000 /* FILE_FLAG_WRITE_THROUGH */
+#define UV_FS_O_EXLOCK       0x10000000 /* EXCLUSIVE SHARING MODE */
+#define UV_FS_O_NOATIME      0
+#define UV_FS_O_NOCTTY       0
+#define UV_FS_O_NOFOLLOW     0
+#define UV_FS_O_NONBLOCK     0
+#define UV_FS_O_SYMLINK      0
+#define UV_FS_O_SYNC         0x08000000 /* FILE_FLAG_WRITE_THROUGH */

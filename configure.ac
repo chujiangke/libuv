@@ -64,14 +64,9 @@ AM_CONDITIONAL([OS390],    [AS_CASE([$host_os],[openedition*],  [true], [false])
 AM_CONDITIONAL([SUNOS],    [AS_CASE([$host_os],[solaris*],      [true], [false])])
 AM_CONDITIONAL([WINNT],    [AS_CASE([$host_os],[mingw*],        [true], [false])])
 AS_CASE([$host_os],[mingw*], [
-    LIBS="$LIBS -lws2_32 -lpsapi -liphlpapi -lshell32 -luserenv -luser32"
+    LIBS="$LIBS -lws2_32 -lpsapi -liphlpapi -lshell32 -lsecur32 -luserenv -luser32"
 ])
 AS_CASE([$host_os], [netbsd*], [AC_CHECK_LIB([kvm], [kvm_open])])
 AC_CHECK_HEADERS([sys/ahafs_evProds.h])
-AC_CHECK_PROG(PKG_CONFIG, pkg-config, yes)
-AM_CONDITIONAL([HAVE_PKG_CONFIG], [test "x$PKG_CONFIG" != "x"])
-AS_IF([test "x$PKG_CONFIG" != "x"], [
-    AC_CONFIG_FILES([libuv.pc])
-])
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile libuv.pc])
 AC_OUTPUT

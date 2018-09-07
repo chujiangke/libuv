@@ -27,6 +27,13 @@
 # include <io.h>
 #else
 # include <unistd.h>
+# include <sched.h>
+#endif
+
+#if defined(__FreeBSD__)
+# include <sys/param.h>
+# include <sys/cpuset.h>
+# include <pthread_np.h>
 #endif
 
 #include "uv.h"
@@ -37,12 +44,14 @@
 #include "test-list.h"
 
 int ipc_helper(int listen_after_write);
+int ipc_helper_heavy_traffic_deadlock_bug(void);
 int ipc_helper_tcp_connection(void);
 int ipc_helper_closed_handle(void);
 int ipc_send_recv_helper(void);
 int ipc_helper_bind_twice(void);
 int stdio_over_pipes_helper(void);
 int spawn_stdin_stdout(void);
+int spawn_tcp_server_helper(void);
 
 static int maybe_run_test(int argc, char **argv);
 
@@ -82,6 +91,10 @@ static int maybe_run_test(int argc, char **argv) {
     return ipc_helper(1);
   }
 
+  if (strcmp(argv[1], "ipc_helper_heavy_traffic_deadlock_bug") == 0) {
+    return ipc_helper_heavy_traffic_deadlock_bug();
+  }
+
   if (strcmp(argv[1], "ipc_send_recv_helper") == 0) {
     return ipc_send_recv_helper();
   }
@@ -109,6 +122,10 @@ static int maybe_run_test(int argc, char **argv) {
   if (strcmp(argv[1], "spawn_helper2") == 0) {
     printf("hello world\n");
     return 1;
+  }
+
+  if (strcmp(argv[1], "spawn_tcp_server_helper") == 0) {
+    return spawn_tcp_server_helper();
   }
 
   if (strcmp(argv[1], "spawn_helper3") == 0) {
@@ -194,6 +211,48 @@ static int maybe_run_test(int argc, char **argv) {
     return 1;
   }
 #endif  /* !_WIN32 */
+
+#if !defined(NO_CPU_AFFINITY)
+  if (strcmp(argv[1], "spawn_helper_affinity") == 0) {
+    int i;
+    int r;
+    int cpu;
+    int cpumask_size;
+#ifdef _WIN32
+    DWORD_PTR procmask;
+    DWORD_PTR sysmask;
+#elif defined(__linux__)
+    cpu_set_t cpuset;
+#else
+    cpuset_t cpuset;
+#endif
+
+    cpumask_size = uv_cpumask_size();
+    ASSERT(cpumask_size > 0);
+
+    cpu = atoi(argv[2]);
+    ASSERT(cpu >= 0);
+    ASSERT(cpu < cpumask_size);
+
+    /* verify the mask has the cpu we expect */
+#ifdef _WIN32
+    r = GetProcessAffinityMask(GetCurrentProcess(), &procmask, &sysmask);
+    ASSERT(r != 0);
+    for (i = 0; i < cpumask_size; ++i) {
+      ASSERT(((procmask & (((DWORD_PTR)1) << i)) != 0) == (i == cpu));
+    }
+#else
+    CPU_ZERO(&cpuset);
+    r = pthread_getaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+    ASSERT(r == 0);
+    for (i = 0; i < cpumask_size; ++i) {
+      ASSERT(CPU_ISSET(i, &cpuset) == (i == cpu));
+    }
+#endif
+
+    return 1;
+  }
+#endif
 
   return run_test(argv[1], 0, 1);
 }

@@ -154,8 +154,8 @@ error:
 }
 
 
-/* Timeout is is msecs. Set timeout < 0 to never time out. */
-/* Returns 0 when all processes are terminated, -2 on timeout. */
+/* Timeout is in msecs. Set timeout < 0 to never time out. Returns 0 when all
+ * processes are terminated, -2 on timeout. */
 int process_wait(process_info_t *vec, int n, int timeout) {
   int i;
   HANDLE handles[MAXIMUM_WAIT_OBJECTS];
@@ -289,7 +289,6 @@ int process_reap(process_info_t *p) {
 void process_cleanup(process_info_t *p) {
   CloseHandle(p->process);
   CloseHandle(p->stdio_in);
-  CloseHandle(p->stdio_out);
 }
 
 

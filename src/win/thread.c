@@ -52,8 +52,8 @@ static void uv__once_inner(uv_once_t* guard, void (*callback)(void)) {
     guard->ran = 1;
 
   } else {
-    /* We lost the race. Destroy the event we created and wait for the */
-    /* existing one to become signaled. */
+    /* We lost the race. Destroy the event we created and wait for the existing
+     * one to become signaled. */
     CloseHandle(created_event);
     result = WaitForSingleObject(existing_event, INFINITE);
     assert(result == WAIT_OBJECT_0);
@@ -165,6 +165,7 @@ int uv_thread_join(uv_thread_t *tid) {
   else {
     CloseHandle(*tid);
     *tid = 0;
+    MemoryBarrier();  /* For feature parity with pthread_join(). */
     return 0;
   }
 }
@@ -178,6 +179,11 @@ int uv_thread_equal(const uv_thread_t* t1, const uv_thread_t* t2) {
 int uv_mutex_init(uv_mutex_t* mutex) {
   InitializeCriticalSection(mutex);
   return 0;
+}
+
+
+int uv_mutex_init_recursive(uv_mutex_t* mutex) {
+  return uv_mutex_init(mutex);
 }
 
 
@@ -362,6 +368,7 @@ int uv_cond_init(uv_cond_t* cond) {
 
 void uv_cond_destroy(uv_cond_t* cond) {
   /* Nothing to do. */
+  (void) &cond;
 }
 
 

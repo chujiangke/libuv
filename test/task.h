@@ -195,7 +195,7 @@ UNUSED static int can_ipv6(void) {
   return supported;
 }
 
-#if defined(__MVS__) || defined(__CYGWIN__) || defined(__MSYS__)
+#if defined(__CYGWIN__) || defined(__MSYS__)
 # define NO_FS_EVENTS "Filesystem watching not supported on this platform."
 #endif
 
@@ -213,6 +213,13 @@ UNUSED static int can_ipv6(void) {
 #elif defined(__CYGWIN__)
 # define NO_SELF_CONNECT \
   "Cygwin runtime hangs on listen+connect in same process."
+#endif
+
+#if !defined(__linux__) && \
+    !defined(__FreeBSD__) && \
+    !defined(_WIN32)
+# define NO_CPU_AFFINITY \
+  "affinity not supported on this platform."
 #endif
 
 #endif /* TASK_H_ */
